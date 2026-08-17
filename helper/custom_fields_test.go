@@ -482,6 +482,31 @@ func Test_ParseCustomFields(t *testing.T) {
 			want: CustomFields{{ID: idA, Name: "k", Value: "last"}},
 		},
 		{
+			// Malformed input only: uuid ids plus the uniqueness rules in the web
+			// extension and validateCustomFields keep any compliant writer from
+			// producing this. Both rules then apply at once: every metadata entry is
+			// kept, and each resolves against the one surviving secret entry for that
+			// id. The id is the only correlation the format defines, so there is
+			// nothing to pair "first" with "a" by.
+			name: "duplicate id on both sides",
+			metadata: map[string]any{
+				"custom_fields": []any{
+					map[string]any{"id": idA, "metadata_key": "first"},
+					map[string]any{"id": idA, "metadata_key": "second"},
+				},
+			},
+			secret: map[string]any{
+				"custom_fields": []any{
+					map[string]any{"id": idA, "secret_value": "a"},
+					map[string]any{"id": idA, "secret_value": "b"},
+				},
+			},
+			want: CustomFields{
+				{ID: idA, Name: "first", Value: "b"},
+				{ID: idA, Name: "second", Value: "b"},
+			},
+		},
+		{
 			name:     "custom_fields is not an array",
 			metadata: map[string]any{"custom_fields": "nope"},
 			secret:   map[string]any{"custom_fields": 42},
