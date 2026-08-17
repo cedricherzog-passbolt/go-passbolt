@@ -2,9 +2,33 @@ package helper
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/google/uuid"
 )
+
+// CustomField is one custom field of a v5 resource, merged from its metadata and
+// secret halves by id.
+type CustomField struct {
+	ID    string
+	Name  string // metadata_key, else the decrypted secret_key
+	Value string // secret_value, else metadata_value
+}
+
+// CustomFields is a resource's custom fields, in metadata order.
+type CustomFields []CustomField
+
+// Map flattens custom fields to name -> value, dropping unnamed ones. On duplicate
+// names the last wins.
+func (c CustomFields) Map() map[string]string {
+	out := make(map[string]string, len(c))
+	for _, cf := range c {
+		if cf.Name != "" {
+			out[cf.Name] = cf.Value
+		}
+	}
+	return out
+}
 
 // validateCustomFields validates custom_fields arrays in metadata and secret maps
 // before encryption. This enforces the same rules as the Passbolt web extension:
@@ -100,6 +124,69 @@ func validateCustomFields(metadataFields, secretFields map[string]any) error {
 	}
 
 	return nil
+}
+
+// ParseCustomFields merges the custom_fields arrays of the metadata and secret field
+// maps returned by GetResourceFieldMaps. The metadata array decides which fields exist
+// and in what order, so a resource with none there returns nil. Malformed entries are
+// projected as best they can be rather than rejected, since the server cannot validate
+// encrypted content.
+func ParseCustomFields(metadataFields, secretFields map[string]any) CustomFields {
+	metaCF, _ := extractCustomFields(metadataFields)
+	if len(metaCF) == 0 {
+		return nil
+	}
+	secretCF, _ := extractCustomFields(secretFields)
+
+	// Duplicate ids: last wins. Blank ids are left out rather than paired with each
+	// other; the schema requires the key but permits "".
+	secretByID := make(map[string]map[string]any, len(secretCF))
+	for _, cf := range secretCF {
+		if id := GetStringField(cf, "id"); id != "" {
+			secretByID[id] = cf
+		}
+	}
+
+	out := make(CustomFields, 0, len(metaCF))
+	for _, meta := range metaCF {
+		id := GetStringField(meta, "id")
+		secret := secretByID[id] // nil when unmatched; reads below are nil-safe
+
+		// A name lives on one side only: cleartext in metadata_key, or encrypted
+		// in secret_key.
+		name := GetStringField(meta, "metadata_key")
+		if name == "" {
+			name = GetStringField(secret, "secret_key")
+		}
+
+		// First non-empty wins: a cleartext field still carries an empty
+		// secret_value, so keying on presence would shadow metadata_value.
+		value := stringifyCustomFieldValue(secret["secret_value"])
+		if value == "" {
+			value = stringifyCustomFieldValue(meta["metadata_value"])
+		}
+
+		out = append(out, CustomField{ID: id, Name: name, Value: value})
+	}
+
+	return out
+}
+
+// stringifyCustomFieldValue renders a custom field value as a string. Passbolt allows
+// string, number, boolean or null; anything else is malformed.
+func stringifyCustomFieldValue(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 // extractCustomFields extracts the custom_fields array from a field map.
