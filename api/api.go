@@ -28,13 +28,13 @@ type APIHeader struct {
 // DoCustomRequest Executes a Custom Request and returns a APIResponse
 //
 // Deprecated: DoCustomRequest is deprecated. Use DoCustomRequestV5 instead
-func (c *Client) DoCustomRequest(ctx context.Context, method, path, version string, body interface{}, opts interface{}) (*APIResponse, error) {
+func (c *Client) DoCustomRequest(ctx context.Context, method, path, version string, body any, opts any) (*APIResponse, error) {
 	_, response, err := c.DoCustomRequestAndReturnRawResponse(ctx, method, path, version, body, opts)
 	return response, err
 }
 
 // DoCustomRequestV5 Executes a Custom Request and returns a APIResponse
-func (c *Client) DoCustomRequestV5(ctx context.Context, method, path string, body interface{}, opts interface{}) (*APIResponse, error) {
+func (c *Client) DoCustomRequestV5(ctx context.Context, method, path string, body any, opts any) (*APIResponse, error) {
 	_, response, err := c.DoCustomRequestAndReturnRawResponseV5(ctx, method, path, body, opts)
 	return response, err
 }
@@ -42,12 +42,12 @@ func (c *Client) DoCustomRequestV5(ctx context.Context, method, path string, bod
 // DoCustomRequestAndReturnRawResponse Executes a Custom Request and returns a APIResponse and the Raw HTTP Response
 //
 // Deprecated: DoCustomRequestAndReturnRawResponse is deprecated. Use DoCustomRequestAndReturnRawResponseV5 instead
-func (c *Client) DoCustomRequestAndReturnRawResponse(ctx context.Context, method, path, version string, body interface{}, opts interface{}) (*http.Response, *APIResponse, error) {
+func (c *Client) DoCustomRequestAndReturnRawResponse(ctx context.Context, method, path, version string, body any, opts any) (*http.Response, *APIResponse, error) {
 	// version is no longer used and is ignored.
 	return c.DoCustomRequestAndReturnRawResponseV5(ctx, method, path, body, opts)
 }
 
-func (c *Client) DoCustomRequestAndReturnRawResponseV5(ctx context.Context, method, path string, body interface{}, opts interface{}) (*http.Response, *APIResponse, error) {
+func (c *Client) DoCustomRequestAndReturnRawResponseV5(ctx context.Context, method, path string, body any, opts any) (*http.Response, *APIResponse, error) {
 	firstTime := true
 start:
 	u, err := generateURL(*c.baseURL, path, opts)

@@ -12,7 +12,7 @@ import (
 
 // doList performs a GET on a collection endpoint and decodes the JSON array
 // into a slice of T.
-func doList[T any](ctx context.Context, c *Client, path string, opts interface{}) ([]T, error) {
+func doList[T any](ctx context.Context, c *Client, path string, opts any) ([]T, error) {
 	msg, err := c.DoCustomRequest(ctx, "GET", path, "v2", nil, opts)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func doList[T any](ctx context.Context, c *Client, path string, opts interface{}
 // doInto performs a request and decodes the JSON response body into a fresh T.
 // It is used for single-entity GETs and for mutations whose request body type
 // differs from the response type (e.g. updating a group with a GroupUpdate).
-func doInto[T any](ctx context.Context, c *Client, method, path string, body, opts interface{}) (*T, error) {
+func doInto[T any](ctx context.Context, c *Client, method, path string, body, opts any) (*T, error) {
 	msg, err := c.DoCustomRequest(ctx, method, path, "v2", body, opts)
 	if err != nil {
 		return nil, err

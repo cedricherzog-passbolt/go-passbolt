@@ -32,7 +32,7 @@ func TestGetResourceTypesCached_OnlyHitsServerOnce(t *testing.T) {
 		},
 	})
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		types, err := client.GetResourceTypesCached(bg())
 		if err != nil {
 			t.Fatalf("call %d: %v", i, err)
