@@ -162,7 +162,7 @@ func NewClient(httpClient *http.Client, UserAgent, BaseURL, UserPrivateKey, User
 	return c, err
 }
 
-func (c *Client) newRequest(method, url string, body interface{}) (*http.Request, error) {
+func (c *Client) newRequest(method, url string, body any) (*http.Request, error) {
 	var buf io.ReadWriter
 	if body != nil {
 		buf = new(bytes.Buffer)
@@ -230,14 +230,14 @@ func (c *Client) do(ctx context.Context, req *http.Request, v *APIResponse) (*ht
 	return resp, nil
 }
 
-func (c *Client) log(msg string, args ...interface{}) {
+func (c *Client) log(msg string, args ...any) {
 	if !c.Debug {
 		return
 	}
 	fmt.Printf("[go-passbolt] "+msg+"\n", args...)
 }
 
-func generateURL(base url.URL, p string, opt interface{}) (string, error) {
+func generateURL(base url.URL, p string, opt any) (string, error) {
 	base.Path = path.Join(base.Path, p)
 	vs, err := query.Values(opt)
 	if err != nil {

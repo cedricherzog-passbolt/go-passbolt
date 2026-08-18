@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -35,9 +36,29 @@ import (
 // versa) is a deliberate, reviewable change. Refresh both together when moving
 // to a new Passbolt release.
 const (
-	mariadbImage  = "mariadb:10.11@sha256:8acd4a5561e8897cfc8a99480f25bcecb10b726fa17b1ec7381c6ef36fa00a79"
-	passboltImage = "passbolt/passbolt:5.12.0-1-ce@sha256:f4344e1d45159494339ca7184c58e6b76067602e898bee72b53bfa093366c24b"
+	mariadbImage = "mariadb:10.11@sha256:8acd4a5561e8897cfc8a99480f25bcecb10b726fa17b1ec7381c6ef36fa00a79"
+
+	// defaultPassboltImage is what every normal run uses.
+	defaultPassboltImage = "passbolt/passbolt:5.14.3-1-ce@sha256:9f97ab2a854019737b4fc30a7fdb598f80a547769d4480a76e6f4b6d0bfbd431"
+
+	// PassboltImageEnv names the environment variable that overrides
+	// defaultPassboltImage, so the same suite can be replayed against several
+	// Passbolt releases (see scripts/test-matrix.sh). An override is
+	// deliberately tag-only: pinning a digest per version would mean tracking
+	// ~15 digests by hand. MariaDB stays pinned either way — it is not the
+	// variable under test.
+	PassboltImageEnv = "PASSBOLT_TEST_IMAGE"
 )
+
+// PassboltImage reports the Passbolt image the next Start will use: the
+// PASSBOLT_TEST_IMAGE override when set and non-blank, otherwise the pinned
+// default.
+func PassboltImage() string {
+	if img := strings.TrimSpace(os.Getenv(PassboltImageEnv)); img != "" {
+		return img
+	}
+	return defaultPassboltImage
+}
 
 // Credentials is everything a test needs to authenticate as a Passbolt user.
 type Credentials struct {
@@ -114,7 +135,7 @@ func Start(ctx context.Context) (*Passbolt, error) {
 
 	pbReq := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        passboltImage,
+			Image:        PassboltImage(),
 			Networks:     []string{net.Name},
 			ExposedPorts: []string{"80/tcp"},
 			Env: map[string]string{
@@ -379,8 +400,8 @@ func (p *Passbolt) createSharedMetadataKey(ctx context.Context, admin *api.Clien
 // metadata key's PGP user-id, which Passbolt validates loosely.
 func stripScheme(url string) string {
 	for _, sep := range []string{"://"} {
-		if i := strings.Index(url, sep); i >= 0 {
-			return url[i+len(sep):]
+		if _, after, ok := strings.Cut(url, sep); ok {
+			return after
 		}
 	}
 	return url

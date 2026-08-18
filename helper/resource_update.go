@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/passbolt/go-passbolt/api"
@@ -108,9 +109,7 @@ func UpdateResourceGeneric(ctx context.Context, c *api.Client, resourceID string
 		}
 
 		// Merge updates
-		for k, v := range metadataUpdates {
-			metadataMap[k] = v
-		}
+		maps.Copy(metadataMap, metadataUpdates)
 
 		newMetadata, err := json.Marshal(metadataMap)
 		if err != nil {
@@ -192,9 +191,7 @@ func UpdateResourceGeneric(ctx context.Context, c *api.Client, resourceID string
 		}
 
 		// Merge updates
-		for k, v := range secretUpdates {
-			secretMap[k] = v
-		}
+		maps.Copy(secretMap, secretUpdates)
 
 		res, err := json.Marshal(secretMap)
 		if err != nil {

@@ -6,7 +6,7 @@ A Go module to interact with [Passbolt](https://www.passbolt.com/), an open-sour
 
 There also is a CLI Tool to interact with Passbolt using this module [here](https://github.com/passbolt/go-passbolt-cli).
 
-This module tries to support the latest Passbolt Community/PRO server release, PRO Features such as folders are supported. Older versions of Passbolt such as v2 are unsupported (it's a password manager, please update it)
+Both Passbolt Community and PRO servers are supported.
 
 This module is divided into two packages: API and helper.
 
@@ -18,7 +18,16 @@ To use the API package, please read the [Passbolt API docs](https://help.passbol
 
 PR's are welcome. But be gentle: if it's something bigger or fundamental: please [create an issue](https://github.com/passbolt/go-passbolt/issues/new) and ask first.
 
-Disclaimer: This project is community driven and not associated with Passbolt SA
+# API Compatibility
+
+The Go module is designed to work with the latest Passbolt API version, and we strongly recommend keeping your API up to date.
+
+> [!IMPORTANT]
+> Compatibility is currently tested with Passbolt API 5.6.1 and later. Older versions are unsupported and may not work.
+
+Support for 5.6.1 is not guaranteed indefinitely and the minimum supported API version may increase in future releases.
+
+In addition, users should also make sure they are running the latest version of the module. A current client stays compatible with supported older API versions, but an older client is not guaranteed to work against a newer API.
 
 # Install
 
@@ -79,7 +88,7 @@ Then you can simply:
 resourceID, err := helper.CreateResource(
 	ctx,                        // Context
 	client,                     // API Client
-	"",                         // ID of Parent Folder (PRO only)
+	"",                         // ID of Parent Folder
 	"Example Account",          // Name
 	"user123",                  // Username
 	"https://test.example.com", // URI
@@ -147,7 +156,7 @@ groups, err := client.GetGroups(ctx, &api.GetGroupsOptions{
 })
 ```
 
-And also for folders (PRO only):
+And also for folders:
 
 ```go
 folders, err := client.GetFolders(ctx, &api.GetFolderOptions{
@@ -279,11 +288,11 @@ changes = append(changes, ShareOperation{
 err := helper.ShareResource(ctx, c, resourceID, changes)
 ```
 
-Note: These functions are also available for folders (PRO)
+Note: These functions are also available for folders
 
-## Moving (PRO)
+## Moving
 
-In Passbolt PRO there are folders, during the creation of resources and folders you can specify in which folder you want to create the resource/folder inside. But if you want to change which folder the resource/folder is in then you can't use the `Update` function (it is/was possible to update the parent folder using the `Update` function but that breaks things). Instead, you use the `Move` function.
+In Passbolt there are folders, during the creation of resources and folders you can specify in which folder you want to create the resource/folder inside. But if you want to change which folder the resource/folder is in then you can't use the `Update` function (it is/was possible to update the parent folder using the `Update` function but that breaks things). Instead, you use the `Move` function.
 
 ```go
 err := client.MoveResource(ctx, "resource id", "parent folder id")
@@ -382,7 +391,7 @@ func main() {
 	resourceID, err := helper.CreateResource(
 		ctx,                        // Context
 		client,                     // API Client
-		"",                         // ID of Parent Folder (PRO only)
+		"",                         // ID of Parent Folder
 		"Example Account",          // Name
 		"user123",                  // Username
 		"https://test.example.com", // URI
