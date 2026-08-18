@@ -198,10 +198,8 @@ func TestEncryptDecrypt_ConcurrentSafety(t *testing.T) {
 	const n = 20
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range n {
+		wg.Go(func() {
 			armored, err := client.EncryptMessage("payload")
 			if err != nil {
 				errs <- err
@@ -215,7 +213,7 @@ func TestEncryptDecrypt_ConcurrentSafety(t *testing.T) {
 			if got != "payload" {
 				errs <- errors.New("decrypted mismatch")
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

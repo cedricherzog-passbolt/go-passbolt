@@ -400,8 +400,8 @@ func (p *Passbolt) createSharedMetadataKey(ctx context.Context, admin *api.Clien
 // metadata key's PGP user-id, which Passbolt validates loosely.
 func stripScheme(url string) string {
 	for _, sep := range []string{"://"} {
-		if i := strings.Index(url, sep); i >= 0 {
-			return url[i+len(sep):]
+		if _, after, ok := strings.Cut(url, sep); ok {
+			return after
 		}
 	}
 	return url

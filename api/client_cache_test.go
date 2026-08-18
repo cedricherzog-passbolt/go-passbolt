@@ -128,7 +128,7 @@ func TestGetMetadataKeysCached_OnlyHitsServerOnce(t *testing.T) {
 		},
 	})
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		got, err := client.GetMetadataKeysCached(bg())
 		if err != nil {
 			t.Fatalf("call %d: %v", i, err)

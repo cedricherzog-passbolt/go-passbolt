@@ -220,10 +220,10 @@ func TestCacheThreadSafety(t *testing.T) {
 	wg.Add(numGoroutines * 3) // 3 types of goroutines
 
 	// Writers for resource IDs
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				resourceID := "resource-" + string(rune('A'+id))
 				key := crypto.NewSessionKeyFromToken(make([]byte, 32), "aes256")
 				client.SetSessionKeyByResourceID(resourceID, key)
@@ -232,10 +232,10 @@ func TestCacheThreadSafety(t *testing.T) {
 	}
 
 	// Writers for metadata key IDs
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				metadataKeyID := "metakey-" + string(rune('A'+id))
 				key := crypto.NewSessionKeyFromToken(make([]byte, 32), "aes256")
 				client.SetSessionKeyByMetadataKeyID(metadataKeyID, key)
@@ -244,10 +244,10 @@ func TestCacheThreadSafety(t *testing.T) {
 	}
 
 	// Readers mixed with cache clears
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				resourceID := "resource-" + string(rune('A'+id))
 				metadataKeyID := "metakey-" + string(rune('A'+id))
 
@@ -278,7 +278,7 @@ func TestClearSessionKeyCacheZerosAllKeys(t *testing.T) {
 
 	// Add multiple session keys
 	keys := make([]*crypto.SessionKey, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		keys[i] = crypto.NewSessionKeyFromToken(make([]byte, 32), "aes256")
 		// Fill with test data
 		for j := range keys[i].Key {
@@ -413,9 +413,9 @@ func TestConcurrentKeyCopy(t *testing.T) {
 
 	// Start concurrent decryption goroutines
 	// Each goroutine gets its own key copy from GetDecryptedMetadataKeyCached
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
-			for j := 0; j < numDecrypts; j++ {
+			for range numDecrypts {
 				// Get a copy of the key (this is how the real code works)
 				keyCopy, err := client.GetDecryptedMetadataKeyCached(context.Background(), "test-key-id")
 				if err != nil {
@@ -431,7 +431,7 @@ func TestConcurrentKeyCopy(t *testing.T) {
 
 	// Collect results
 	go func() {
-		for i := 0; i < numGoroutines*numDecrypts; i++ {
+		for range numGoroutines * numDecrypts {
 			if err := <-results; err != nil {
 				t.Errorf("Decryption error in concurrent test: %v", err)
 			}
