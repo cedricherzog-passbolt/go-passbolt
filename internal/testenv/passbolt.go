@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -80,8 +81,8 @@ type Passbolt struct {
 // others.
 func (p *Passbolt) Close(ctx context.Context) error {
 	var errs []error
-	for i := len(p.teardown) - 1; i >= 0; i-- {
-		if err := p.teardown[i](ctx); err != nil {
+	for _, teardown := range slices.Backward(p.teardown) {
+		if err := teardown(ctx); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -107,24 +108,22 @@ func Start(ctx context.Context) (*Passbolt, error) {
 	p.teardown = append(p.teardown, net.Remove)
 
 	dbReq := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:          mariadbImage,
-			Networks:       []string{net.Name},
-			NetworkAliases: map[string][]string{net.Name: {"db"}},
-			Env: map[string]string{
-				"MYSQL_ROOT_PASSWORD": "passbolt",
-				"MYSQL_DATABASE":      "passbolt",
-				"MYSQL_USER":          "passbolt",
-				"MYSQL_PASSWORD":      "passbolt",
-			},
-			// MariaDB logs "ready for connections" twice: once during
-			// init, again after the post-init restart. Wait for the
-			// second occurrence so subsequent connections aren't racing
-			// the restart.
-			WaitingFor: wait.ForLog("ready for connections").
-				WithOccurrence(2).
-				WithStartupTimeout(2 * time.Minute),
+		Image:          mariadbImage,
+		Networks:       []string{net.Name},
+		NetworkAliases: map[string][]string{net.Name: {"db"}},
+		Env: map[string]string{
+			"MYSQL_ROOT_PASSWORD": "passbolt",
+			"MYSQL_DATABASE":      "passbolt",
+			"MYSQL_USER":          "passbolt",
+			"MYSQL_PASSWORD":      "passbolt",
 		},
+		// MariaDB logs "ready for connections" twice: once during
+		// init, again after the post-init restart. Wait for the
+		// second occurrence so subsequent connections aren't racing
+		// the restart.
+		WaitingFor: wait.ForLog("ready for connections").
+			WithOccurrence(2).
+			WithStartupTimeout(2 * time.Minute),
 		Started: true,
 	}
 	db, err := testcontainers.GenericContainer(ctx, dbReq)
@@ -134,26 +133,24 @@ func Start(ctx context.Context) (*Passbolt, error) {
 	p.teardown = append(p.teardown, func(ctx context.Context) error { return db.Terminate(ctx) })
 
 	pbReq := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        PassboltImage(),
-			Networks:     []string{net.Name},
-			ExposedPorts: []string{"80/tcp"},
-			Env: map[string]string{
-				"DATASOURCES_DEFAULT_HOST":     "db",
-				"DATASOURCES_DEFAULT_USERNAME": "passbolt",
-				"DATASOURCES_DEFAULT_PASSWORD": "passbolt",
-				"DATASOURCES_DEFAULT_DATABASE": "passbolt",
-				// Port-agnostic base URL: register_user prints links
-				// with this hostname but we hit the API via the mapped
-				// host port. Passbolt CE does not enforce a Host-header
-				// match by default.
-				"APP_FULL_BASE_URL":  "http://localhost",
-				"PASSBOLT_SSL_FORCE": "false",
-			},
-			WaitingFor: wait.ForHTTP("/healthcheck/status.json").
-				WithPort("80/tcp").
-				WithStartupTimeout(3 * time.Minute),
+		Image:        PassboltImage(),
+		Networks:     []string{net.Name},
+		ExposedPorts: []string{"80/tcp"},
+		Env: map[string]string{
+			"DATASOURCES_DEFAULT_HOST":     "db",
+			"DATASOURCES_DEFAULT_USERNAME": "passbolt",
+			"DATASOURCES_DEFAULT_PASSWORD": "passbolt",
+			"DATASOURCES_DEFAULT_DATABASE": "passbolt",
+			// Port-agnostic base URL: register_user prints links
+			// with this hostname but we hit the API via the mapped
+			// host port. Passbolt CE does not enforce a Host-header
+			// match by default.
+			"APP_FULL_BASE_URL":  "http://localhost",
+			"PASSBOLT_SSL_FORCE": "false",
 		},
+		WaitingFor: wait.ForHTTP("/healthcheck/status.json").
+			WithPort("80/tcp").
+			WithStartupTimeout(3 * time.Minute),
 		Started: true,
 	}
 	pb, err := testcontainers.GenericContainer(ctx, pbReq)
