@@ -3,8 +3,7 @@ package helper
 import (
 	"fmt"
 	"strconv"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // CustomField is one custom field of a v5 resource, merged from its metadata and

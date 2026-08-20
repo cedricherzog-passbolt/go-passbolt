@@ -4,8 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/google/uuid"
+	"uuid"
 )
 
 // GPGVerifyContainer is used for verification
@@ -25,11 +24,7 @@ func (c *Client) SetupServerVerification(ctx context.Context) (string, string, e
 	if err != nil {
 		return "", "", fmt.Errorf("getting Server Key: %w", err)
 	}
-	uuid, err := uuid.NewRandom()
-	if err != nil {
-		return "", "", fmt.Errorf("generating UUID: %w", err)
-	}
-	token := "gpgauthv1.3.0|36|" + uuid.String() + "|gpgauthv1.3.0"
+	token := "gpgauthv1.3.0|36|" + uuid.NewV4().String() + "|gpgauthv1.3.0"
 	encToken, err := c.EncryptMessageWithPublicKey(serverKey, token)
 	if err != nil {
 		return "", "", fmt.Errorf("encrypting Challenge: %w", err)
