@@ -9,6 +9,16 @@ import (
 )
 
 // APIResponse is the Struct representation of a Json Response
+//
+// Every Passbolt response flows through this envelope, so a note on the decoder:
+// as of Go 1.27 encoding/json is implemented on top of encoding/json/v2 (the
+// jsonv2 GOEXPERIMENT, on by default) and json.RawMessage is an alias for
+// jsontext.Value. The v1 semantics this package relies on were audited against
+// Go 1.27.0 and are unchanged - notably that duplicate object names are accepted
+// with the last one winning, that RawMessage round trips bytes verbatim, and that
+// omitempty keeps its v1 meaning. See api/json_compat_test.go, which pins those
+// and passes under both backends, and GOEXPERIMENT=nojsonv2 for the escape hatch
+// back to the old implementation while it still exists.
 type APIResponse struct {
 	Header APIHeader       `json:"header"`
 	Body   json.RawMessage `json:"body"`
