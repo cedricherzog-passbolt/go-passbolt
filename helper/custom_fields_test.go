@@ -28,12 +28,12 @@ func Test_validateCustomFields(t *testing.T) {
 	// shape and mutates exactly the field under test.
 	validEntry := func(id string) (metadata, secret map[string]any) {
 		return map[string]any{
-				"id":           id,
-				"metadata_key": "field-name",
-			}, map[string]any{
-				"id":           id,
-				"secret_value": "field-value",
-			}
+			"id":           id,
+			"metadata_key": "field-name",
+		}, map[string]any{
+			"id":           id,
+			"secret_value": "field-value",
+		}
 	}
 
 	cases := []struct {
