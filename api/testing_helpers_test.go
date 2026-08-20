@@ -48,6 +48,16 @@ type route struct {
 // newMockServer starts an httptest.Server that dispatches requests by exact
 // method+path match. Unmatched requests fall through to a t.Errorf so routing
 // mistakes are loud rather than silent.
+//
+// The server uses httptest.NewTestServer (Go 1.27+), which runs on an in-memory
+// network rather than a loopback port: no port allocation under parallel CI, and
+// handler panics are reported as t.Errorf with a stack instead of being logged to
+// stderr. It also registers its own Close via t.Cleanup, and it is the only
+// httptest server that works inside a testing/synctest bubble.
+//
+// Because the network is in-memory, requests only reach the server through the
+// http.Client returned by srv.Client() — http.DefaultClient cannot see it. Callers
+// must therefore hand srv.Client() to NewClient; see newTestClient.
 func newMockServer(t testing.TB, routes ...route) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -58,9 +68,7 @@ func newMockServer(t testing.TB, routes ...route) *httptest.Server {
 		t.Errorf("unexpected request to mock server: %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv
+	return httptest.NewTestServer(t, mux)
 }
 
 // newTestClient builds a Client pointed at a fresh mock server with the given
@@ -71,7 +79,12 @@ func newMockServer(t testing.TB, routes ...route) *httptest.Server {
 func newTestClient(t testing.TB, routes ...route) (*httptest.Server, *Client) {
 	t.Helper()
 	srv := newMockServer(t, routes...)
-	client, err := NewClient(nil, "", srv.URL, "", "")
+	// srv.Client() must be called before srv.URL is read: on an in-memory server
+	// the first Client call is what starts the fake net and populates URL (it is
+	// "" until then). Bind it to a local so this does not silently depend on
+	// argument evaluation order.
+	httpClient := srv.Client()
+	client, err := NewClient(httpClient, "", srv.URL, "", "")
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -84,7 +97,8 @@ func newTestClientWithKey(t testing.TB, routes ...route) (*httptest.Server, *Cli
 	t.Helper()
 	priv, pass := testPGPKey(t)
 	srv := newMockServer(t, routes...)
-	client, err := NewClient(nil, "", srv.URL, priv, pass)
+	httpClient := srv.Client() // see newTestClient: must precede reading srv.URL
+	client, err := NewClient(httpClient, "", srv.URL, priv, pass)
 	if err != nil {
 		t.Fatalf("NewClient with key: %v", err)
 	}
