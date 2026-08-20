@@ -237,15 +237,20 @@ func (c *Client) log(msg string, args ...any) {
 	fmt.Printf("[go-passbolt] "+msg+"\n", args...)
 }
 
-func generateURL(base url.URL, p string, opt any) (string, error) {
-	base.Path = path.Join(base.Path, p)
+// generateURL builds a request URL by appending p to base's path and encoding opt
+// as the query string. base is never modified: it is deep-copied via
+// (*url.URL).Clone, which also copies the Userinfo a plain struct copy would share
+// with the caller.
+func generateURL(base *url.URL, p string, opt any) (string, error) {
+	u := base.Clone()
+	u.Path = path.Join(u.Path, p)
 	vs, err := query.Values(opt)
 	if err != nil {
 		return "", fmt.Errorf("getting URL Query Values: %w", err)
 	}
-	base.RawQuery = vs.Encode()
+	u.RawQuery = vs.Encode()
 
-	return base.String(), nil
+	return u.String(), nil
 }
 
 // GetUserID Gets the ID of the Current User
