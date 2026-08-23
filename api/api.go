@@ -15,10 +15,13 @@ import (
 // jsonv2 GOEXPERIMENT, on by default) and json.RawMessage is an alias for
 // jsontext.Value. The v1 semantics this package relies on were audited against
 // Go 1.27.0 and are unchanged - notably that duplicate object names are accepted
-// with the last one winning, that RawMessage round trips bytes verbatim, and that
-// omitempty keeps its v1 meaning. See api/json_compat_test.go, which pins those
-// and passes under both backends, and GOEXPERIMENT=nojsonv2 for the escape hatch
-// back to the old implementation while it still exists.
+// with the last one winning, that decoding into a RawMessage keeps the payload
+// bytes verbatim (encoding one still compacts and HTML-escapes it, which is why
+// the SDK only ever decodes Body), that omitempty keeps its v1 meaning, and that
+// a type mismatch still surfaces as *json.UnmarshalTypeError, which is what the
+// escaped-schema workaround in helper/ branches on. See api/json_compat_test.go,
+// which pins those and passes under both backends, and GOEXPERIMENT=nojsonv2 for
+// the escape hatch back to the old implementation while it still exists.
 type APIResponse struct {
 	Header APIHeader       `json:"header"`
 	Body   json.RawMessage `json:"body"`

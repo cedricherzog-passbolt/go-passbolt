@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -73,15 +75,22 @@ func TestJSONDuplicateNames_LastWins(t *testing.T) {
 	})
 }
 
-// TestJSONRawMessage_StaysRawAndUnescaped pins that json.RawMessage still round
-// trips bytes verbatim. APIResponse.Body is a RawMessage that is decoded a second
-// time by every caller, and in Go 1.27 RawMessage became an alias for
-// jsontext.Value, so this is worth stating explicitly.
-func TestJSONRawMessage_StaysRawAndUnescaped(t *testing.T) {
+// TestJSONRawMessage_DecodesVerbatim pins what a json.RawMessage inside the
+// envelope actually guarantees, which is a decode-side promise only.
+//
+// APIResponse.Body is a RawMessage that every caller decodes a second time, and in
+// Go 1.27 RawMessage became an alias for jsontext.Value, so both directions are
+// worth stating:
+//
+//   - decoding hands back the bytes exactly as they appeared in the payload, so a
+//     second Unmarshal sees what the server sent;
+//   - encoding does not. json.Marshal compacts a RawMessage and HTML-escapes <, >
+//     and & inside it like any other content. The SDK never re-encodes a server
+//     envelope, so that costs nothing here - but "round trips bytes verbatim"
+//     would be the wrong summary, and the assertion below is what says so.
+func TestJSONRawMessage_DecodesVerbatim(t *testing.T) {
 	t.Parallel()
 
-	// HTML-significant characters in a secret must survive an envelope round trip
-	// unchanged, and the envelope's own encoding must not double-escape them.
 	const body = `{"password":"a<b>c&d"}`
 	env := APIResponse{
 		Header: APIHeader{Status: "success", Code: 200},
@@ -92,18 +101,64 @@ func TestJSONRawMessage_StaysRawAndUnescaped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal envelope: %v", err)
 	}
+	const wantBody = `{"password":"a\u003cb\u003ec\u0026d"}`
+	if !strings.Contains(string(encoded), wantBody) {
+		t.Errorf("encoded envelope is %s, want the body to appear as %s", encoded, wantBody)
+	}
 
 	var round APIResponse
 	if err := json.Unmarshal(encoded, &round); err != nil {
 		t.Fatalf("Unmarshal envelope: %v", err)
 	}
+	if string(round.Body) != wantBody {
+		t.Errorf("decoded Body = %s, want %s (decoding must not rewrite the raw bytes)", round.Body, wantBody)
+	}
 
+	// The value itself still survives: the inner decode undoes the escapes.
 	var secret map[string]string
 	if err := json.Unmarshal(round.Body, &secret); err != nil {
 		t.Fatalf("Unmarshal body %q: %v", round.Body, err)
 	}
 	if secret["password"] != "a<b>c&d" {
 		t.Errorf("password = %q, want %q", secret["password"], "a<b>c&d")
+	}
+}
+
+// TestJSONUnmarshalTypeError_KeepsItsV1Type pins the error type production code
+// branches on.
+//
+// helper/metadata.go and helper/secret.go cope with servers that sometimes embed a
+// resource type's schema as an object and sometimes as an escaped JSON string.
+// Both spot the second shape with errors.AsType[*json.UnmarshalTypeError](err) and
+// only then decode the string before decoding the schema. If the compatibility
+// layer ever reported a string-where-object-was-expected mismatch as some other
+// error type, neither would retry, and every resource on such a server would fail
+// validation with an opaque error instead. Of the v1 error shapes, this is the one
+// the SDK actually depends on.
+func TestJSONUnmarshalTypeError_KeepsItsV1Type(t *testing.T) {
+	t.Parallel()
+
+	// The escaped shape: a JSON string where the schema object is expected.
+	var schema ResourceTypeSchema
+	err := json.Unmarshal([]byte(`"{\"resource\":{},\"secret\":{}}"`), &schema)
+	if err == nil {
+		t.Fatal("Unmarshal of a quoted schema succeeded; want a type error")
+	}
+	// errors.AsType is the exact check both call sites make.
+	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); !ok {
+		t.Fatalf("error is %T (%v), want *json.UnmarshalTypeError", err, err)
+	}
+
+	// Decoding the string first, as both call sites do, then works.
+	var inner string
+	if err := json.Unmarshal([]byte(`"{\"resource\":{},\"secret\":{}}"`), &inner); err != nil {
+		t.Fatalf("Unmarshal into string: %v", err)
+	}
+	if err := json.Unmarshal([]byte(inner), &schema); err != nil {
+		t.Fatalf("Unmarshal unquoted schema: %v", err)
+	}
+	if schema.Resource == nil || schema.Secret == nil {
+		t.Errorf("schema = %+v, want both sections populated", schema)
 	}
 }
 
