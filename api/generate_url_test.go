@@ -102,7 +102,7 @@ func TestGenerateURL_DoesNotMutateBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("url.Parse: %v", err)
 	}
-	userinfo := base.User // same pointer a plain struct copy would have shared
+	userinfo := base.User // *url.Userinfo is immutable, so the pointer must survive as-is
 
 	const want = "https://user:pass@passbolt.test/passbolt/resources.json"
 	for i := range 3 {
