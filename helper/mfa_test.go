@@ -40,9 +40,10 @@ type mfaAttempt struct {
 // mfaRecorder is the mock TOTP endpoint. It records every attempt and fails the
 // first failFirst of them, so a test can pin both the retry count and the backoff.
 type mfaRecorder struct {
-	t         *testing.T
-	start     time.Time
-	failFirst int // fail this many attempts before succeeding; -1 fails them all
+	t          *testing.T
+	start      time.Time
+	failFirst  int  // fail this many attempts before succeeding; -1 fails them all
+	omitCookie bool // accept the code but answer without the passbolt_mfa cookie
 
 	mu       sync.Mutex
 	attempts []mfaAttempt
@@ -68,7 +69,9 @@ func (m *mfaRecorder) handler(w http.ResponseWriter, r *http.Request) {
 		writeMFAEnvelope(m.t, w, api.APIHeader{Status: "error", Code: 400, Message: "invalid code"})
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "passbolt_mfa", Value: "mfa-session-token"})
+	if !m.omitCookie {
+		http.SetCookie(w, &http.Cookie{Name: "passbolt_mfa", Value: "mfa-session-token"})
+	}
 	writeMFAEnvelope(m.t, w, api.APIHeader{Status: "success", Code: 200})
 }
 
@@ -278,12 +281,10 @@ func TestAddMFACallbackTOTP_NoTOTPProvider(t *testing.T) {
 // a zero cookie as if it had succeeded.
 func TestAddMFACallbackTOTP_MissingCookie(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		var requests int
-		c := newMFATestClient(t, func(w http.ResponseWriter, r *http.Request) {
-			requests++
-			// Accepted, but no passbolt_mfa cookie.
-			writeMFAEnvelope(t, w, api.APIHeader{Status: "success", Code: 200})
-		})
+		// failFirst: 0 accepts the first code; omitCookie answers without setting
+		// passbolt_mfa.
+		rec := &mfaRecorder{t: t, start: time.Now(), failFirst: 0, omitCookie: true}
+		c := newMFATestClient(t, rec.handler)
 		AddMFACallbackTOTP(c, 3, time.Second, 0, mfaTestSecret)
 
 		_, err := c.MFACallback(context.Background(), c, mfaChallengeResponse(t, "/mfa/verify/totp"))
@@ -291,8 +292,8 @@ func TestAddMFACallbackTOTP_MissingCookie(t *testing.T) {
 			t.Fatal("MFACallback: got nil error, want failure when passbolt_mfa cookie is absent")
 		}
 		// A missing cookie is not a wrong code, so it must not burn the retries.
-		if requests != 1 {
-			t.Errorf("made %d requests, want 1 — a missing cookie must not be retried", requests)
+		if n := len(rec.recorded()); n != 1 {
+			t.Errorf("made %d requests, want 1: a missing cookie must not be retried", n)
 		}
 	})
 }
