@@ -3,8 +3,10 @@ package helper
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -167,35 +169,43 @@ func TestAddMFACallbackTOTP_RetriesThenSucceeds(t *testing.T) {
 }
 
 // TestAddMFACallbackTOTP_ExhaustsRetries pins the failure path: the callback must
-// try exactly retrys+1 times and then give up with an error.
+// try exactly retrys+1 times, report that count, and then give up with an error.
+//
+// Both a zero and a non-zero retrys are covered on purpose. A single retrys=2 case
+// cannot tell "retrys+1" apart from a hardcoded 3, which is how the error message
+// came to claim "3 times" for every configuration.
 func TestAddMFACallbackTOTP_ExhaustsRetries(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		const (
-			retrys     = uint(2)
-			retryDelay = 10 * time.Second
-		)
+	const retryDelay = 10 * time.Second
 
-		rec := &mfaRecorder{t: t, start: time.Now(), failFirst: -1}
-		c := newMFATestClient(t, rec.handler)
-		AddMFACallbackTOTP(c, retrys, retryDelay, 0, mfaTestSecret)
+	for _, retrys := range []uint{0, 2} {
+		t.Run(fmt.Sprintf("retrys=%d", retrys), func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				rec := &mfaRecorder{t: t, start: time.Now(), failFirst: -1}
+				c := newMFATestClient(t, rec.handler)
+				AddMFACallbackTOTP(c, retrys, retryDelay, 0, mfaTestSecret)
 
-		_, err := c.MFACallback(context.Background(), c, mfaChallengeResponse(t, "/mfa/verify/totp"))
-		if err == nil {
-			t.Fatal("MFACallback: got nil error, want failure after exhausting retries")
-		}
+				_, err := c.MFACallback(context.Background(), c, mfaChallengeResponse(t, "/mfa/verify/totp"))
+				if err == nil {
+					t.Fatal("MFACallback: got nil error, want failure after exhausting retries")
+				}
+				if want := fmt.Sprintf("after %d attempts", retrys+1); !strings.Contains(err.Error(), want) {
+					t.Errorf("error is %q, want it to report %q", err, want)
+				}
 
-		attempts := rec.recorded()
-		// retrys+1 = the initial attempt plus each configured retry.
-		if len(attempts) != int(retrys)+1 {
-			t.Fatalf("made %d attempts, want %d", len(attempts), int(retrys)+1)
-		}
-		for i, a := range attempts {
-			want := time.Duration(i) * retryDelay
-			if a.elapsed != want {
-				t.Errorf("attempt %d at %v, want %v", i+1, a.elapsed, want)
-			}
-		}
-	})
+				attempts := rec.recorded()
+				// retrys+1 = the initial attempt plus each configured retry.
+				if len(attempts) != int(retrys)+1 {
+					t.Fatalf("made %d attempts, want %d", len(attempts), int(retrys)+1)
+				}
+				for i, a := range attempts {
+					want := time.Duration(i) * retryDelay
+					if a.elapsed != want {
+						t.Errorf("attempt %d at %v, want %v", i+1, a.elapsed, want)
+					}
+				}
+			})
+		})
+	}
 }
 
 // TestAddMFACallbackTOTP_AppliesOffset checks that the offset argument actually

@@ -49,6 +49,6 @@ func AddMFACallbackTOTP(c *api.Client, retrys uint, retryDelay, offset time.Dura
 				return http.Cookie{}, fmt.Errorf("unable to find Passbolt MFA Cookie")
 			}
 		}
-		return http.Cookie{}, fmt.Errorf("failed MFA Challenge 3 times: %w", err)
+		return http.Cookie{}, fmt.Errorf("failed MFA Challenge after %d attempts: %w", retrys+1, err)
 	}
 }
