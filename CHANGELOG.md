@@ -7,6 +7,7 @@ Releases before 0.8.2 are documented in the [GitHub releases](https://github.com
 ## [Unreleased]
 ### Fixed
 - The TOTP MFA callback now reports how many attempts it actually made instead of always saying 3
+- The TOTP MFA callback no longer waits one extra retry delay after its final failed attempt
 
 ### Maintenance
 - PB-54147: Bump go version to 1.27.0 (the minimum supported Go version is now 1.27)

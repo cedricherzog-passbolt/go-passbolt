@@ -37,8 +37,12 @@ func AddMFACallbackTOTP(c *api.Client, retrys uint, retryDelay, offset time.Dura
 				if _, ok := errors.AsType[*api.APIError](err); !ok {
 					return http.Cookie{}, fmt.Errorf("doing MFA Challenge Response: %w", err)
 				}
-				// MFA failed, so lets wait just let the loop try again
-				time.Sleep(retryDelay)
+				// MFA failed, so wait and let the loop try again. Not after the
+				// last attempt though: there is nothing left to wait for, and
+				// sleeping there just delays the error the caller already earned.
+				if i < retrys {
+					time.Sleep(retryDelay)
+				}
 			} else {
 				// MFA worked so lets find the cookie and return it
 				for _, cookie := range raw.Cookies() {

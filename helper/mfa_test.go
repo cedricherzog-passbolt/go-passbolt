@@ -203,6 +203,11 @@ func TestAddMFACallbackTOTP_ExhaustsRetries(t *testing.T) {
 						t.Errorf("attempt %d at %v, want %v", i+1, a.elapsed, want)
 					}
 				}
+				// One delay between attempts and none after the last one, so the
+				// callback returns the moment the final code is rejected.
+				if total, want := time.Since(rec.start), time.Duration(retrys)*retryDelay; total != want {
+					t.Errorf("callback returned after %v, want %v (it must not sleep after the last attempt)", total, want)
+				}
 			})
 		})
 	}
