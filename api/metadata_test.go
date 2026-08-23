@@ -18,7 +18,7 @@ import (
 func TestEncryptDecryptMetadata_RoundTrip(t *testing.T) {
 	t.Parallel()
 
-	_, client := newTestClientWithKey(t)
+	client := newTestClientWithKey(t)
 	metaKey, err := client.GetUserPrivateKeyCopy()
 	if err != nil {
 		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
@@ -52,7 +52,7 @@ func TestEncryptDecryptMetadata_RoundTrip(t *testing.T) {
 func TestDecryptMetadataWithKeyID_CachesSessionKey(t *testing.T) {
 	t.Parallel()
 
-	_, client := newTestClientWithKey(t)
+	client := newTestClientWithKey(t)
 	metaKey, err := client.GetUserPrivateKeyCopy()
 	if err != nil {
 		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
@@ -101,7 +101,7 @@ func TestDecryptMetadataWithKeyID_CachesSessionKey(t *testing.T) {
 func TestDecryptMetadataWithKeyID_EmptyKeyIDSkipsCache(t *testing.T) {
 	t.Parallel()
 
-	_, client := newTestClientWithKey(t)
+	client := newTestClientWithKey(t)
 	metaKey, err := client.GetUserPrivateKeyCopy()
 	if err != nil {
 		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
@@ -131,7 +131,7 @@ func TestDecryptMetadataWithKeyID_EmptyKeyIDSkipsCache(t *testing.T) {
 func TestDecryptMetadataWithResourceID_UsesResourceCacheFirst(t *testing.T) {
 	t.Parallel()
 
-	_, client := newTestClientWithKey(t)
+	client := newTestClientWithKey(t)
 	metaKey, err := client.GetUserPrivateKeyCopy()
 	if err != nil {
 		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
@@ -173,13 +173,13 @@ func TestDecryptMetadataWithResourceID_UsesResourceCacheFirst(t *testing.T) {
 func TestEncryptMetadata_FailsWithoutClientKey(t *testing.T) {
 	t.Parallel()
 
-	_, keyed := newTestClientWithKey(t)
+	keyed := newTestClientWithKey(t)
 	metaKey, err := keyed.GetUserPrivateKeyCopy()
 	if err != nil {
 		t.Fatalf("setup: %v", err)
 	}
 
-	_, unkeyed := newTestClient(t) // no user key on this client
+	unkeyed := newTestClient(t) // no user key on this client
 	_, err = unkeyed.EncryptMetadata(metaKey, "x")
 	if err == nil {
 		t.Fatal("expected error encrypting without user key, got nil")

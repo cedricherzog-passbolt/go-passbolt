@@ -2,8 +2,9 @@
 //
 // All hermetic tests in this package follow the same pattern:
 //
-//  1. Build a per-test httptest.Server with exact-match routes via
-//     newMockServer / newTestClient. Unmatched requests fail the test.
+//  1. Build a per-test mock server with exact-match routes via
+//     newTestClient, which returns a Client already pointed at it.
+//     Unmatched requests fail the test.
 //  2. Use writeAPIResponse / writeAPIError / writeMFAChallenge to emit
 //     the Passbolt envelope JSON shape.
 //  3. Use readJSONBody to inspect what the Client sent (URL, method,
@@ -45,9 +46,10 @@ type route struct {
 	handler http.HandlerFunc
 }
 
-// newMockServer starts an httptest.Server that dispatches requests by exact
-// method+path match. Unmatched requests fall through to a t.Errorf so routing
-// mistakes are loud rather than silent.
+// newMockServer starts a mock server that dispatches requests by exact method+path
+// match, and returns its URL together with the only http.Client that can reach it.
+// Unmatched requests fall through to a t.Errorf so routing mistakes are loud rather
+// than silent.
 //
 // The server uses httptest.NewTestServer (Go 1.27+), which runs on an in-memory
 // network rather than a loopback port: no port allocation under parallel CI, and
@@ -56,9 +58,10 @@ type route struct {
 // httptest server that works inside a testing/synctest bubble.
 //
 // Because the network is in-memory, requests only reach the server through the
-// http.Client returned by srv.Client() — http.DefaultClient cannot see it. Callers
-// must therefore hand srv.Client() to NewClient; see newTestClient.
-func newMockServer(t testing.TB, routes ...route) *httptest.Server {
+// http.Client returned by srv.Client() - http.DefaultClient cannot see it. That
+// call is also what starts the fake net and populates srv.URL, which is "" until
+// then, so this helper makes it rather than handing callers an unstarted server.
+func newMockServer(t testing.TB, routes ...route) (string, *http.Client) {
 	t.Helper()
 	mux := http.NewServeMux()
 	for _, r := range routes {
@@ -68,7 +71,9 @@ func newMockServer(t testing.TB, routes ...route) *httptest.Server {
 		t.Errorf("unexpected request to mock server: %s %s", r.Method, r.URL.Path)
 		http.NotFound(w, r)
 	})
-	return httptest.NewTestServer(t, mux)
+	srv := httptest.NewTestServer(t, mux)
+	httpClient := srv.Client()
+	return srv.URL, httpClient
 }
 
 // newTestClient builds a Client pointed at a fresh mock server with the given
@@ -76,33 +81,27 @@ func newMockServer(t testing.TB, routes ...route) *httptest.Server {
 // HTTP transport layer and entity CRUD methods.
 //
 // For tests that need crypto operations, use newTestClientWithKey.
-func newTestClient(t testing.TB, routes ...route) (*httptest.Server, *Client) {
+func newTestClient(t testing.TB, routes ...route) *Client {
 	t.Helper()
-	srv := newMockServer(t, routes...)
-	// srv.Client() must be called before srv.URL is read: on an in-memory server
-	// the first Client call is what starts the fake net and populates URL (it is
-	// "" until then). Bind it to a local so this does not silently depend on
-	// argument evaluation order.
-	httpClient := srv.Client()
-	client, err := NewClient(httpClient, "", srv.URL, "", "")
+	srvURL, httpClient := newMockServer(t, routes...)
+	client, err := NewClient(httpClient, "", srvURL, "", "")
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	return srv, client
+	return client
 }
 
 // newTestClientWithKey is like newTestClient but arms the Client with the
 // shared test PGP keypair (generated once per test binary).
-func newTestClientWithKey(t testing.TB, routes ...route) (*httptest.Server, *Client) {
+func newTestClientWithKey(t testing.TB, routes ...route) *Client {
 	t.Helper()
 	priv, pass := testPGPKey(t)
-	srv := newMockServer(t, routes...)
-	httpClient := srv.Client() // see newTestClient: must precede reading srv.URL
-	client, err := NewClient(httpClient, "", srv.URL, priv, pass)
+	srvURL, httpClient := newMockServer(t, routes...)
+	client, err := NewClient(httpClient, "", srvURL, priv, pass)
 	if err != nil {
 		t.Fatalf("NewClient with key: %v", err)
 	}
-	return srv, client
+	return client
 }
 
 // writeAPIResponse encodes a `status="success"` envelope wrapping body as JSON.
