@@ -110,8 +110,33 @@ func (c *Client) DecryptMetadataWithResourceID(resourceID, metadataKeyID string,
 	return metadata, nil
 }
 
+// EncryptMetadata encrypts metadata using the provided key, signed with the user's private key only.
+//
+// Deprecated: EncryptMetadata always signs with only the user's private key. That is correct for
+// personal (user_key) metadata, but not for shared v5 metadata, where clients that verify metadata
+// signatures (e.g. the ansible lookup plugin) require a signature from the shared metadata key
+// itself. Use EncryptMetadataWithKeyType instead.
 func (c *Client) EncryptMetadata(metadataKey *crypto.Key, data string) (string, error) {
-	armoredCiphertext, err := c.EncryptMessageWithKey(metadataKey, data)
+	return c.EncryptMetadataWithKeyType(metadataKey, MetadataKeyTypeUserKey, data)
+}
+
+// EncryptMetadataWithKeyType encrypts metadata using the provided key.
+//
+// For shared metadata (keyType == MetadataKeyTypeSharedKey), the result is signed with both the
+// user's private key and the metadata private key, matching the browser extension
+// (encryptMetadataService.js) so that clients verifying metadata signatures — such as the ansible
+// lookup plugin — can trust the blob regardless of which user wrote it last.
+//
+// For personal metadata (keyType == MetadataKeyTypeUserKey, the default for any other value),
+// only the user's private key signs, as there is no shared key to co-sign with.
+func (c *Client) EncryptMetadataWithKeyType(metadataKey *crypto.Key, keyType MetadataKeyType, data string) (string, error) {
+	var armoredCiphertext string
+	var err error
+	if keyType == MetadataKeyTypeSharedKey {
+		armoredCiphertext, err = c.EncryptMessageWithKeyAndSigner(metadataKey, metadataKey, data)
+	} else {
+		armoredCiphertext, err = c.EncryptMessageWithKey(metadataKey, data)
+	}
 	if err != nil {
 		return "", fmt.Errorf("encrypting Metadata: %w", err)
 	}

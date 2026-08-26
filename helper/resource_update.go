@@ -129,7 +129,7 @@ func UpdateResourceGeneric(ctx context.Context, c *api.Client, resourceID string
 		newResource.MetadataKeyID = metadataKeyID
 		newResource.MetadataKeyType = metadataKeyType
 
-		encMetadata, err := c.EncryptMessageWithKey(publicMetadataKey, string(newMetadata))
+		encMetadata, err := c.EncryptMetadataWithKeyType(publicMetadataKey, metadataKeyType, string(newMetadata))
 		if err != nil {
 			return fmt.Errorf("encrypt metadata: %w", err)
 		}

@@ -360,12 +360,18 @@ func (p *Passbolt) createSharedMetadataKey(ctx context.Context, admin *api.Clien
 
 	// "passphrase must be Empty for Server Keys" per the SDK's
 	// MetadataPrivateKeyData comments.
+	//
+	// Signed must be set: api.Time always marshals (omitempty doesn't apply to struct
+	// fields), so leaving it zero-value sends "0001-01-01T00:00:00Z". The Go SDK never
+	// validates this field, so that goes unnoticed here, but the browser extension's
+	// MetadataPrivateKeyDataEntity does validate it and rejects the record outright.
 	payload, err := json.Marshal(api.MetadataPrivateKeyData{
 		ObjectType:  "PASSBOLT_METADATA_PRIVATE_KEY",
 		Domain:      p.BaseURL,
 		Fingerprint: fingerprint,
 		ArmoredKey:  privateArmored,
 		Passphrase:  "",
+		Signed:      api.Time{Time: time.Now()},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal metadata private key data: %w", err)

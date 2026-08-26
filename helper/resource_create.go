@@ -100,7 +100,7 @@ func CreateResourceGeneric(ctx context.Context, c *api.Client, slug string, fold
 		resource.MetadataKeyID = metadataKeyID
 		resource.MetadataKeyType = metadataKeyType
 
-		encMetadata, err := c.EncryptMessageWithKey(publicMetadataKey, string(metaData))
+		encMetadata, err := c.EncryptMetadataWithKeyType(publicMetadataKey, metadataKeyType, string(metaData))
 		if err != nil {
 			return "", fmt.Errorf("encrypt metadata: %w", err)
 		}
