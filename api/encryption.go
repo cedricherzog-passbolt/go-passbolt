@@ -86,6 +86,55 @@ func (c *Client) EncryptMessageWithKey(publicKey *crypto.Key, message string) (s
 	return encArmor, nil
 }
 
+// EncryptMessageWithKeyAndSigner encrypts a message using the provided key and signs it with both
+// the user's private key and extraSigningKey, if extraSigningKey is not nil.
+//
+// This is used for shared v5 metadata, which must carry a signature from the shared metadata key
+// in addition to the writer's own signature: metadata is decrypted through the shared key by every
+// user with access, so clients that verify signatures (e.g. the ansible lookup plugin) pin
+// verification to the metadata key's own fingerprint rather than to whichever user wrote it last.
+// This method is thread-safe.
+func (c *Client) EncryptMessageWithKeyAndSigner(publicKey *crypto.Key, extraSigningKey *crypto.Key, message string) (string, error) {
+	c.cryptoMu.Lock()
+	defer c.cryptoMu.Unlock()
+
+	if c.userPrivateKey == nil {
+		return "", ErrNoPrivateKey
+	}
+
+	key, err := c.userPrivateKey.Copy()
+	if err != nil {
+		return "", fmt.Errorf("get Private Key Copy: %w", err)
+	}
+
+	encBuilder := c.pgp.Encryption().SigningKey(key).Recipient(publicKey)
+	if extraSigningKey != nil {
+		signerKey, err := extraSigningKey.Copy()
+		if err != nil {
+			return "", fmt.Errorf("get Signing Key Copy: %w", err)
+		}
+		encBuilder = encBuilder.SigningKey(signerKey)
+	}
+
+	encHandle, err := encBuilder.New()
+	if err != nil {
+		return "", fmt.Errorf("new Encryptor: %w", err)
+	}
+
+	defer encHandle.ClearPrivateParams()
+
+	encMessage, err := encHandle.Encrypt([]byte(message))
+	if err != nil {
+		return "", fmt.Errorf("encrypt Message: %w", err)
+	}
+
+	encArmor, err := encMessage.Armor()
+	if err != nil {
+		return "", fmt.Errorf("armor Message: %w", err)
+	}
+	return encArmor, nil
+}
+
 // DecryptMessage decrypts a message using the users Private Key.
 // This method is thread-safe.
 func (c *Client) DecryptMessage(armoredCiphertext string) (string, error) {

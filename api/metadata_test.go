@@ -3,6 +3,8 @@ package api
 import (
 	"strings"
 	"testing"
+
+	"github.com/ProtonMail/gopenpgp/v3/crypto"
 )
 
 // Metadata tests focus on the session-key caching layer. V5 resources
@@ -183,5 +185,124 @@ func TestEncryptMetadata_FailsWithoutClientKey(t *testing.T) {
 	_, err = unkeyed.EncryptMetadata(metaKey, "x")
 	if err == nil {
 		t.Fatal("expected error encrypting without user key, got nil")
+	}
+}
+
+// TestEncryptMetadataWithKeyType_SharedKeySignsWithBothKeys is the
+// regression test for the go-passbolt/ansible-lookup-plugin interop bug:
+// shared v5 metadata written by the SDK must carry a verifiable signature
+// from the shared metadata key itself, not just the writer's own key,
+// because clients verifying metadata (e.g. the ansible plugin) pin
+// verification to the metadata key's fingerprint.
+func TestEncryptMetadataWithKeyType_SharedKeySignsWithBothKeys(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClientWithKey(t)
+	metadataKey := generateTestKey(t, "Shared Metadata Key", "metadata@example.com")
+
+	want := `{"name":"Stripe","username":"alice@example.com"}`
+	armored, err := client.EncryptMetadataWithKeyType(metadataKey, MetadataKeyTypeSharedKey, want)
+	if err != nil {
+		t.Fatalf("EncryptMetadataWithKeyType: %v", err)
+	}
+
+	verifiers, err := crypto.NewKeyRing(metadataKey)
+	if err != nil {
+		t.Fatalf("build verify keyring: %v", err)
+	}
+	userPublic, err := crypto.NewKeyFromArmored(testPGPPublic(t))
+	if err != nil {
+		t.Fatalf("parse user public key: %v", err)
+	}
+	if err := verifiers.AddKey(userPublic); err != nil {
+		t.Fatalf("add user key to verify keyring: %v", err)
+	}
+
+	decHandle, err := crypto.PGP().Decryption().DecryptionKey(metadataKey).VerificationKeys(verifiers).New()
+	if err != nil {
+		t.Fatalf("new decryptor: %v", err)
+	}
+	res, err := decHandle.Decrypt([]byte(armored), crypto.Armor)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if res.String() != want {
+		t.Errorf("round-trip mismatch: got %q, want %q", res.String(), want)
+	}
+
+	verifiedFingerprints := map[string]bool{}
+	for _, sig := range res.Signatures {
+		if sig.SignatureError == nil && sig.SignedBy != nil {
+			verifiedFingerprints[sig.SignedBy.GetFingerprint()] = true
+		}
+	}
+	if !verifiedFingerprints[metadataKey.GetFingerprint()] {
+		t.Errorf("metadata not verifiably signed by the metadata key; verified: %v", verifiedFingerprints)
+	}
+	if !verifiedFingerprints[client.userPrivateKey.GetFingerprint()] {
+		t.Errorf("metadata not verifiably signed by the user key; verified: %v", verifiedFingerprints)
+	}
+}
+
+// TestEncryptMetadataWithKeyType_UserKeyStaysSingleSigned confirms personal
+// (user_key) metadata keeps its historical single-signature shape: there is
+// no shared key to co-sign with, so adding a second signer here would just
+// be noise (and, if it were the metadata key from a previous shared state,
+// arguably misleading).
+func TestEncryptMetadataWithKeyType_UserKeyStaysSingleSigned(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClientWithKey(t)
+	metaKey, err := client.GetUserPrivateKeyCopy()
+	if err != nil {
+		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
+	}
+
+	armored, err := client.EncryptMetadataWithKeyType(metaKey, MetadataKeyTypeUserKey, `{"name":"Stripe"}`)
+	if err != nil {
+		t.Fatalf("EncryptMetadataWithKeyType: %v", err)
+	}
+
+	res, err := crypto.PGP().Decryption().DecryptionKey(metaKey).VerificationKey(metaKey).New()
+	if err != nil {
+		t.Fatalf("new decryptor: %v", err)
+	}
+	decrypted, err := res.Decrypt([]byte(armored), crypto.Armor)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if len(decrypted.Signatures) != 1 {
+		t.Errorf("expected exactly 1 signature for personal metadata, got %d", len(decrypted.Signatures))
+	}
+}
+
+// TestEncryptMetadata_DeprecatedWrapperStaysSingleSigned locks in the
+// backward-compat contract of the deprecated EncryptMetadata: existing
+// callers get the same single-signature behavior they always did, since
+// the wrapper has no way to know whether metadataKey is a shared key.
+func TestEncryptMetadata_DeprecatedWrapperStaysSingleSigned(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClientWithKey(t)
+	metaKey, err := client.GetUserPrivateKeyCopy()
+	if err != nil {
+		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
+	}
+
+	armored, err := client.EncryptMetadata(metaKey, `{"name":"Stripe"}`)
+	if err != nil {
+		t.Fatalf("EncryptMetadata: %v", err)
+	}
+
+	res, err := crypto.PGP().Decryption().DecryptionKey(metaKey).VerificationKey(metaKey).New()
+	if err != nil {
+		t.Fatalf("new decryptor: %v", err)
+	}
+	decrypted, err := res.Decrypt([]byte(armored), crypto.Armor)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if len(decrypted.Signatures) != 1 {
+		t.Errorf("expected exactly 1 signature from the deprecated wrapper, got %d", len(decrypted.Signatures))
 	}
 }

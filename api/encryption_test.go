@@ -115,6 +115,121 @@ func TestEncryptMessageWithKey_RoundTripUsingExternalRecipient(t *testing.T) {
 	}
 }
 
+// TestEncryptMessageWithKeyAndSigner_DualSignatureVerifies is the core
+// correctness property this function exists for: a message encrypted with
+// an extra signing key must carry TWO independently verifiable signatures
+// (the user's own, plus the extra key's) rather than one signature
+// overwriting the other. This is what shared v5 metadata needs so that
+// other clients (e.g. the ansible lookup plugin) can verify it was signed
+// by the metadata key, regardless of which user wrote it.
+func TestEncryptMessageWithKeyAndSigner_DualSignatureVerifies(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClientWithKey(t)
+	extraKey := generateTestKey(t, "Shared Metadata Key", "metadata@example.com")
+
+	want := "shared secret payload"
+	armored, err := client.EncryptMessageWithKeyAndSigner(extraKey, extraKey, want)
+	if err != nil {
+		t.Fatalf("EncryptMessageWithKeyAndSigner: %v", err)
+	}
+
+	verifiers, err := crypto.NewKeyRing(extraKey)
+	if err != nil {
+		t.Fatalf("build verify keyring: %v", err)
+	}
+	userPublic, err := crypto.NewKeyFromArmored(testPGPPublic(t))
+	if err != nil {
+		t.Fatalf("parse user public key: %v", err)
+	}
+	if err := verifiers.AddKey(userPublic); err != nil {
+		t.Fatalf("add user key to verify keyring: %v", err)
+	}
+
+	decHandle, err := crypto.PGP().Decryption().DecryptionKey(extraKey).VerificationKeys(verifiers).New()
+	if err != nil {
+		t.Fatalf("new decryptor: %v", err)
+	}
+	res, err := decHandle.Decrypt([]byte(armored), crypto.Armor)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if res.String() != want {
+		t.Errorf("round-trip mismatch: got %q, want %q", res.String(), want)
+	}
+	if err := res.SignatureError(); err != nil {
+		t.Errorf("selected signature failed verification: %v", err)
+	}
+
+	verifiedFingerprints := map[string]bool{}
+	for _, sig := range res.Signatures {
+		if sig.SignatureError == nil && sig.SignedBy != nil {
+			verifiedFingerprints[sig.SignedBy.GetFingerprint()] = true
+		}
+	}
+	if !verifiedFingerprints[client.userPrivateKey.GetFingerprint()] {
+		t.Errorf("missing verified signature from user key; verified: %v", verifiedFingerprints)
+	}
+	if !verifiedFingerprints[extraKey.GetFingerprint()] {
+		t.Errorf("missing verified signature from extra signing key; verified: %v", verifiedFingerprints)
+	}
+	if len(verifiedFingerprints) != 2 {
+		t.Errorf("expected exactly 2 verified signers, got %d: %v", len(verifiedFingerprints), verifiedFingerprints)
+	}
+}
+
+// TestEncryptMessageWithKeyAndSigner_NilExtraSignerMatchesSingleSigner
+// verifies that passing a nil extraSigningKey degrades cleanly to a single
+// signature from the user's key, same as EncryptMessageWithKey. Callers
+// (e.g. personal v5 metadata) rely on this to avoid a separate code path.
+func TestEncryptMessageWithKeyAndSigner_NilExtraSignerMatchesSingleSigner(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClientWithKey(t)
+	recipient, err := crypto.NewKeyFromArmored(testPGPPublic(t))
+	if err != nil {
+		t.Fatalf("parse recipient key: %v", err)
+	}
+	decryptionKey, err := client.GetUserPrivateKeyCopy()
+	if err != nil {
+		t.Fatalf("GetUserPrivateKeyCopy: %v", err)
+	}
+
+	armored, err := client.EncryptMessageWithKeyAndSigner(recipient, nil, "solo signed payload")
+	if err != nil {
+		t.Fatalf("EncryptMessageWithKeyAndSigner: %v", err)
+	}
+
+	res, err := crypto.PGP().Decryption().
+		DecryptionKey(decryptionKey).
+		VerificationKey(recipient).
+		New()
+	if err != nil {
+		t.Fatalf("new decryptor: %v", err)
+	}
+	decrypted, err := res.Decrypt([]byte(armored), crypto.Armor)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if len(decrypted.Signatures) != 1 {
+		t.Errorf("expected exactly 1 signature with nil extra signer, got %d", len(decrypted.Signatures))
+	}
+}
+
+// TestEncryptMessageWithKeyAndSigner_FailsWithoutPrivateKey mirrors
+// TestEncryptMessage_FailsWithoutPrivateKey: callers branch on the typed
+// ErrNoPrivateKey, so a logged-out Client must not silently degrade to a
+// generic error.
+func TestEncryptMessageWithKeyAndSigner_FailsWithoutPrivateKey(t *testing.T) {
+	t.Parallel()
+
+	_, client := newTestClient(t)
+	_, err := client.EncryptMessageWithKeyAndSigner(nil, nil, "message")
+	if !errors.Is(err, ErrNoPrivateKey) {
+		t.Errorf("got %v, want ErrNoPrivateKey", err)
+	}
+}
+
 // The deprecated EncryptMessageWithPublicKey wrapper accepts an armored
 // string instead of *crypto.Key. We verify it still works (kept for
 // backward compat) by round-tripping through it.

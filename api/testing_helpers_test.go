@@ -192,6 +192,19 @@ func testPGPPublic(t testing.TB) string {
 	return testPGPPublicArm
 }
 
+// generateTestKey generates a fresh, unlocked PGP key pair for use as a
+// distinct signer/recipient in tests, e.g. a stand-in for the shared
+// metadata key, which must have a different fingerprint from the test
+// user's own key (testPGPKey) to meaningfully test dual signing.
+func generateTestKey(t testing.TB, name, email string) *crypto.Key {
+	t.Helper()
+	key, err := crypto.PGP().KeyGeneration().AddUserId(name, email).New().GenerateKey()
+	if err != nil {
+		t.Fatalf("generate test key %q: %v", email, err)
+	}
+	return key
+}
+
 // sessionKeyForTest returns a deterministic crypto.SessionKey suitable for
 // populating caches in tests where the key's actual content doesn't matter.
 func sessionKeyForTest() *crypto.SessionKey {

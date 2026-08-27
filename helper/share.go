@@ -95,7 +95,7 @@ func ShareResource(ctx context.Context, c *api.Client, resourceID string, change
 		resource.MetadataKeyID = metadataKeyID
 		resource.MetadataKeyType = metadataKeyType
 
-		encMetadata, err := c.EncryptMessageWithKey(publicMetadataKey, metadata)
+		encMetadata, err := c.EncryptMetadataWithKeyType(publicMetadataKey, metadataKeyType, metadata)
 		if err != nil {
 			return fmt.Errorf("encrypt Metadata: %w", err)
 		}
