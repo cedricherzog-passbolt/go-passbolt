@@ -6,6 +6,10 @@ Releases before 0.8.2 are documented in the [GitHub releases](https://github.com
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-08-27
+### Fixed
+- PB-53937: Sign shared v5 metadata with both the user key and the metadata key
+
 ## [0.8.2] - 2026-08-18
 ### Added
 - PB-53915: Surface custom field functions in SDK
