@@ -5,6 +5,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 Releases before 0.8.2 are documented in the [GitHub releases](https://github.com/passbolt/go-passbolt/releases).
 
 ## [Unreleased]
+### Changed
+- PB-54610: Validate Resource metadata and secrets against JSON schemas bundled with the SDK (lenient on read, strict on write) instead of the server-provided definitions, and bundle the six previously missing Resource Types. Resources of a type or with a field that a newer Passbolt release added cannot be read, updated or shared until the SDK is upgraded
 
 ## [0.8.3] - 2026-08-27
 ### Fixed
