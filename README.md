@@ -16,7 +16,7 @@ The helper package has simplified functions that use the API package to perform 
 
 To use the API package, please read the [Passbolt API docs](https://help.passbolt.com/api). Sadly the docs aren't complete so many things here have been found by looking at the source of Passbolt or through trial and error. If you have a question just ask.
 
-PR's are welcome. But be gentle: if it's something bigger or fundamental: please [create an issue](https://github.com/passbolt/go-passbolt/issues/new) and ask first.
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first: open an issue and wait for a maintainer to agree before opening a pull request.
 
 # API Compatibility
 
